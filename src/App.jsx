@@ -5,7 +5,7 @@ import './App.css'
 
 const initialState = {
   primalac: 'Stambena zajednica Oblakovska 15',
-  svrha: 'Račun za 12-25',
+  svrha: 'Račun za 12-26',
   stanjeNaRacunu: '177.385,38',
   vanredniTroskovi: '/',
   racun: '200-3265930101033-58',
@@ -13,6 +13,7 @@ const initialState = {
   pozivNaBroj: '',
   uplatioc: '',
   nazivFajla: 'uplatnica',
+  racunZa: 'januar 2026. godine',
 }
 
 function App() {
@@ -60,26 +61,28 @@ function App() {
       })
 
       const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+      doc.addFont('/fonts/verdana.ttf', 'Verdana', 'normal')
+      doc.addFont('/fonts/verdanab.ttf', 'Verdana', 'bold')
       const margin = 36
       const topOffsetX = 25
       const pageWidth = doc.internal.pageSize.getWidth()
       const contentWidth = pageWidth - margin * 2
 
-      doc.setFont('times', 'bold')
-      doc.setFontSize(20)
+      doc.setFont('Verdana', 'bold')
+      doc.setFontSize(16)
       doc.text('Stambena zajednica OBLAKOVSKA 15', margin + topOffsetX, 50)
 
-      doc.setFont('times', 'normal')
+      doc.setFont('Verdana', 'normal')
       doc.setFontSize(10)
       let y = 70
-      doc.text('Racun za januar 2026. godine', margin + topOffsetX, y)
+      doc.text(`Račun za ${form.racunZa}`, margin + topOffsetX, y)
       y += 16
-      doc.text(`Stanje na racunu stambene zajednice: ${form.stanjeNaRacunu} RSD`, margin + topOffsetX, y)
+      doc.text(`Stanje na računu stambene zajednice: ${form.stanjeNaRacunu} RSD`, margin + topOffsetX, y)
       y += 16
-      doc.text(`Vanredni troskovi u prethodnom mesecu: ${form.vanredniTroskovi}`, margin + topOffsetX, y)
+      doc.text(`Vanredni troškovi u prethodnom mesecu: ${form.vanredniTroskovi}`, margin + topOffsetX, y)
 
       y += 26
-      doc.setFont('times', 'bold')
+      doc.setFont('Verdana', 'bold')
       doc.text('Stavke:', margin + topOffsetX, y)
 
       const tableX = margin + topOffsetX
@@ -97,12 +100,12 @@ function App() {
       doc.line(tableX, tableY + rowHeight * 2, tableX + tableWidth, tableY + rowHeight * 2)
       doc.line(tableX, tableY + rowHeight * 3, tableX + tableWidth, tableY + rowHeight * 3)
 
-      doc.setFont('times', 'normal')
-      doc.text('Fond za tekuce odrzavanje zgrade', tableX + 6, tableY + 15)
+      doc.setFont('Verdana', 'normal')
+      doc.text('Fond za tekuće održavanje zgrade', tableX + 6, tableY + 15)
       doc.text('1100', tableX + col1Width + 8, tableY + 15)
-      doc.text('Ciscenje zgrade', tableX + 6, tableY + rowHeight + 15)
+      doc.text('Čišćenje zgrade', tableX + 6, tableY + rowHeight + 15)
       doc.text('400', tableX + col1Width + 8, tableY + rowHeight + 15)
-      doc.text('Odrzavanje lifta', tableX + 6, tableY + rowHeight * 2 + 15)
+      doc.text('Održavanje lifta', tableX + 6, tableY + rowHeight * 2 + 15)
       doc.text('455', tableX + col1Width + 8, tableY + rowHeight * 2 + 15)
 
       const formX = margin + (contentWidth * 0.05)
@@ -124,77 +127,77 @@ function App() {
       const labelY = leftY
       const boxY = leftY + 6
 
-      doc.setFont('times', 'normal')
+      doc.setFont('Verdana', 'normal')
       doc.setFontSize(9)
       doc.text('Uplatilac:', leftX, labelY)
       doc.rect(leftX, boxY, leftWidth, boxHeight)
 
-      doc.text('Sifra', rightX, labelY - 10)
+      doc.text('Šifra', rightX, labelY - 10)
       doc.text('placanja', rightX, labelY)
       doc.rect(rightX, boxY, smallBoxWidth, boxHeight)
       doc.setFontSize(10)
-      doc.setFont('times', 'bold')
+      doc.setFont('Verdana', 'bold')
       doc.text('289', rightX + 10, boxY + 14)
 
-      doc.setFont('times', 'normal')
+      doc.setFont('Verdana', 'normal')
       doc.setFontSize(9)
       doc.text('Valuta', rightX + 50, labelY + 2) // here was 55
       doc.rect(rightX + 50, boxY, smallBoxWidth, boxHeight)
       doc.setFontSize(10)
-      doc.setFont('times', 'bold')
+      doc.setFont('Verdana', 'bold')
       doc.text('RSD', rightX + 58, boxY + 14) // her ws 63
 
-      doc.setFont('times', 'normal')
+      doc.setFont('Verdana', 'normal')
       doc.setFontSize(9)
       doc.text('Iznos', rightX + 100, labelY + 2)
       doc.rect(rightX + 100, boxY, amountBoxWidth, boxHeight)
       doc.setFontSize(10)
-      doc.setFont('times', 'bold')
-      doc.text(`=${iznosRsd}`, rightX + 110, boxY + 14) // was 118
+      doc.setFont('Verdana', 'bold')
+      doc.text(`=${iznosRsd}`, rightX + 103, boxY + 14) // was 110
 
       leftY += rowSpacing
       rightY += rowSpacing
-      doc.setFont('times', 'normal')
+      doc.setFont('Verdana', 'normal')
       doc.setFontSize(9)
       doc.text('Svrha uplate:', leftX, leftY)
       doc.rect(leftX, leftY + 4, leftWidth, boxHeight)
       doc.setFontSize(10)
-      doc.setFont('times', 'bold')
+      doc.setFont('Verdana', 'bold')
       doc.text(form.svrha || '-', leftX + 4, leftY + 16, { maxWidth: leftWidth - 8 })
 
-      doc.setFont('times', 'normal')
+      doc.setFont('Verdana', 'normal')
       doc.setFontSize(9)
-      doc.text('Racun primaoca', rightX, rightY)
+      doc.text('Račun primaoca', rightX, rightY)
       doc.rect(rightX, rightY + 4, 160, boxHeight) // was 190
       doc.setFontSize(10)
-      doc.setFont('times', 'bold')
-      doc.text(form.racun, rightX + 30, rightY + 16, { maxWidth: 184 })
+      doc.setFont('Verdana', 'bold')
+      doc.text(form.racun, rightX + 10, rightY + 16, { maxWidth: 184 })// was 30
 
       leftY += rowSpacing
       rightY += rowSpacing
-      doc.setFont('times', 'normal')
+      doc.setFont('Verdana', 'normal')
       doc.setFontSize(9)
       doc.text('Primalac:', leftX, leftY)
       doc.rect(leftX, leftY + 4, leftWidth, boxHeight)
       doc.setFontSize(10)
-      doc.setFont('times', 'bold')
+      doc.setFont('Verdana', 'bold')
       doc.text(form.primalac || '-', leftX + 4, leftY + 16, { maxWidth: leftWidth - 8 })
 
-      doc.setFont('times', 'normal')
+      doc.setFont('Verdana', 'normal')
       doc.setFontSize(9)
       doc.text('Model', rightX, rightY)
       doc.rect(rightX, rightY + 4, 40, boxHeight)
       doc.setFontSize(10)
-      doc.setFont('times', 'bold')
+      doc.setFont('Verdana', 'bold')
       doc.text('00', rightX + 10, rightY + 16)
 
       const pozivX = rightX + 50
-      doc.setFont('times', 'normal')
+      doc.setFont('Verdana', 'normal')
       doc.setFontSize(9)
       doc.text('poziv na broj', pozivX, rightY)
       doc.rect(pozivX, rightY + 4, 110, boxHeight)
       doc.setFontSize(10)
-      doc.setFont('times', 'bold')
+      doc.setFont('Verdana', 'bold')
       doc.text(poziv || '-', pozivX + 5, rightY + 16, { maxWidth: 112 })
 
       const qrSize = 90
@@ -228,48 +231,41 @@ function App() {
   return (
     <div className="app">
       <div className="card">
-        <h1>Stambena zajednica OBLAKOVSKA 15</h1>
+        <h1>Generator računa</h1>
         <p>Popunite podatke i kliknite generiši da preuzmete uplatnicu.</p>
 
         <form onSubmit={handleSubmit}>
           <div className="row row-4">
             <label>
-              Uplatilac
-              <input name="uplatioc" value={form.uplatioc} onChange={handleChange} />
+              Račun za
+              <input name="racunZa" value={form.racunZa} onChange={handleChange} />
             </label>
             <label>
-              Sifra placanja
-              <input value="289" disabled />
+              Stanje na računu
+              <input name="stanjeNaRacunu" value={form.stanjeNaRacunu} onChange={handleChange} />
             </label>
             <label>
-              Valuta
-              <input value="RSD" disabled />
+              Vanredni troškovi
+              <input name="vanredniTroskovi" value={form.vanredniTroskovi} onChange={handleChange} />
             </label>
             <label>
-              Iznos
-              <input name="iznos" value={form.iznos} onChange={handleChange} />
+              Naziv fajla
+              <input name="nazivFajla" value={form.nazivFajla} onChange={handleChange} />
             </label>
           </div>
 
-          <div className="row">
+          <div className="row row-4">
             <label>
               Svrha uplate
               <input name="svrha" value={form.svrha} onChange={handleChange} placeholder="Unesite svrhu uplate" />
             </label>
             <label>
-              Racun primaoca
-              <input name="racun" value={form.racun} onChange={handleChange} />
+              Račun primaoca
+              <input name="racun" value={form.racun} disabled />
             </label>
-          </div>
-
-          <div className="row">
             <label>
               Primalac
               <input name="primalac" value={form.primalac} onChange={handleChange} />
-            </label>
-            <label>
-              Model
-              <input value="00" disabled />
             </label>
             <label>
               Poziv na broj
@@ -277,18 +273,10 @@ function App() {
             </label>
           </div>
 
-          <div className="row row-3">
+          <div className="row">
             <label>
-              Stanje na racunu
-              <input name="stanjeNaRacunu" value={form.stanjeNaRacunu} onChange={handleChange} />
-            </label>
-            <label>
-              Vanredni troskovi
-              <input name="vanredniTroskovi" value={form.vanredniTroskovi} onChange={handleChange} />
-            </label>
-            <label>
-              Naziv fajla
-              <input name="nazivFajla" value={form.nazivFajla} onChange={handleChange} />
+              Model
+              <input value="00" disabled />
             </label>
           </div>
 
