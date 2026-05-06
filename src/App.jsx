@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { jsPDF } from 'jspdf'
 import { toDataURL } from 'qrcode'
 import './App.css'
@@ -35,6 +35,14 @@ function App() {
 
   const [bulkForm, setBulkForm] = useState(initialBulkState)
   const [mode, setMode] = useState('single')
+  const [trackingData, setTrackingData] = useState(() => {
+    const saved = window.localStorage.getItem('dugovanja')
+    return saved ? JSON.parse(saved) : {}
+  })
+  const [selectedTracking, setSelectedTracking] = useState({ stan: '1', year: '2025' })
+  const [checkedMonths, setCheckedMonths] = useState(Array(12).fill(false))
+  const [loadedTrackingFileName, setLoadedTrackingFileName] = useState('dugovanja.txt')
+  const backendUrl = 'http://localhost:3000'
 
   const handleChange = (event) => {
     const { name, value } = event.target
@@ -44,6 +52,118 @@ function App() {
   const handleBulkChange = (event) => {
     const { name, value } = event.target
     setBulkForm((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleTrackingSelectChange = (event) => {
+    const { name, value } = event.target
+    setSelectedTracking((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const toggleMonth = (index) => {
+    setCheckedMonths((prev) => {
+      const next = [...prev]
+      next[index] = !next[index]
+      return next
+    })
+  }
+
+  const parseTrackingText = (text) => {
+    const nextData = {}
+    text.split(/\r?\n/).forEach((line) => {
+      const trimmed = line.trim()
+      if (!trimmed) return
+      const parts = trimmed.split('|')
+      if (parts.length < 3) return
+      const [stan, year, values] = parts
+      if (!stan || !year || values === undefined) return
+      const stanPadded = stan.padStart(2, '0')
+      const key = `${stanPadded}|${year}`
+      nextData[key] = values.split(',').map((v) => v.trim() === '1')
+    })
+    return nextData
+  }
+
+  const handleTrackingFileChange = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    const text = await file.text()
+    const nextData = parseTrackingText(text)
+    setTrackingData(nextData)
+    window.localStorage.setItem('dugovanja', JSON.stringify(nextData))
+    setLoadedTrackingFileName(file.name)
+    setStatus(`Učitano ${file.name}.`)
+  }
+
+  const loadTrackingFromRepo = async () => {
+    try {
+      const res = await fetch(`${backendUrl}/api/dugovanja`)
+      if (!res.ok) {
+        throw new Error('Server nije dostupan')
+      }
+      const text = await res.text()
+      const nextData = parseTrackingText(text)
+      setTrackingData(nextData)
+      window.localStorage.setItem('dugovanja', JSON.stringify(nextData))
+      setLoadedTrackingFileName('dugovanja.txt')
+      setStatus('Učitano dugovanja iz repo fajla.')
+    } catch (err) {
+      setError('Ne mogu da učitam src/dugovanja.txt. Pokreni backend.')
+    }
+  }
+
+  const downloadBlob = (blob, filename) => {
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = filename
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  useEffect(() => {
+    loadTrackingFromRepo()
+  }, [])
+
+  useEffect(() => {
+    const stanPadded = selectedTracking.stan.padStart(2, '0')
+    const key = `${stanPadded}|${selectedTracking.year}`
+    const entry = trackingData[key]
+    setCheckedMonths(entry ? entry : Array(12).fill(false))
+  }, [selectedTracking, trackingData])
+
+  const saveTracking = async () => {
+    const confirmed = window.confirm('Da li ste sigurni da želite da sačuvate dugovanja?')
+    if (!confirmed) return
+
+    const stanPadded = selectedTracking.stan.padStart(2, '0')
+    const key = `${stanPadded}|${selectedTracking.year}`
+    const nextData = { ...trackingData, [key]: checkedMonths }
+    setTrackingData(nextData)
+    window.localStorage.setItem('dugovanja', JSON.stringify(nextData))
+    const text = Object.entries(nextData)
+      .map(([k, v]) => `${k}|${v.map((b) => (b ? '1' : '0')).join(',')}`)
+      .join('\n')
+    const filename = loadedTrackingFileName || 'dugovanja.txt'
+
+    try {
+      const res = await fetch(`${backendUrl}/api/save-dugovanja`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, filename }),
+      })
+
+      if (!res.ok) {
+        throw new Error('Backend nije dostupan')
+      }
+
+      setStatus(`Dugovanja sačuvana u repo fajlu ${filename}.`)
+    } catch (err) {
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+      downloadBlob(blob, filename)
+      setStatus(`Dugovanja sačuvana lokalno kao ${filename}.`) 
+    }
   }
 
   const buildQrText = ({ iban, iznos, poziv, primalac, svrha }) => {
@@ -58,7 +178,7 @@ function App() {
     return cleaned
   }
 
-  const createInvoiceDoc = async ({ primalac, svrha, stanjeNaRacunu, vanredniTroskovi, racun, iznos, pozivNaBroj, racunZa }) => {
+  const createInvoiceDoc = async ({ primalac, svrha, stanjeNaRacunu, vanredniTroskovi, racun, iznos, pozivNaBroj, racunZa, trackingData }) => {
     const amount = Number(iznos.replace(',', '.'))
     if (Number.isNaN(amount) || amount <= 0) {
       throw new Error('Iznos mora biti pozitivan broj.')
@@ -231,6 +351,54 @@ function App() {
     doc.line(leftX + 210, footerY, leftX + 300, footerY)
     doc.text('datum valute', leftX + 210, footerY + 8)
 
+    // Add debt information if pozivNaBroj is valid
+    if (pozivNaBroj && pozivNaBroj.length >= 6) {
+      const mm = pozivNaBroj.slice(0, 2)
+      const yy = pozivNaBroj.slice(2, 4)
+      const ss = pozivNaBroj.slice(4, 6)
+      const month = parseInt(mm, 10)
+      const year = 2000 + parseInt(yy, 10)
+      const stan = parseInt(ss, 10)
+      if (month >= 1 && month <= 12 && year >= 2025 && stan >= 1 && stan <= 11) {
+        const stanStr = String(stan).padStart(2, '0')
+        const unpaid = []
+        for (let y = 2025; y <= year; y++) {
+          const key = `${stanStr}|${y}`
+          const months = trackingData[key]
+          if (months) {
+            months.forEach((paid, idx) => {
+              if (!paid) {
+                const m = idx + 1
+                const beforeCurrent = y < year || (y === year && m < month)
+                if (beforeCurrent) {
+                  unpaid.push(`${String(m).padStart(2, '0')}-${y}`)
+                }
+              }
+            })
+          }
+        }
+        let debtY = footerY + 80
+        doc.setFont('Verdana', 'bold')
+        doc.setFontSize(10)
+        if (unpaid.length > 0) {
+          const total = unpaid.length * 1955
+          doc.text('Neplaćeni racuni:', margin + topOffsetX, debtY)
+          debtY += 15
+          doc.setFont('Verdana', 'normal')
+          doc.setFontSize(9)
+          unpaid.forEach(line => {
+            doc.text(line, margin + topOffsetX + 10, debtY)
+            debtY += 12
+          })
+          debtY += 10
+          doc.setFont('Verdana', 'bold')
+          doc.text(`Ukupan dug za neplaćene račune: ${total} dinara`, margin + topOffsetX, debtY)
+        } else {
+          doc.text('Sva dugovanja za prethodne mesece su izmirena', margin + topOffsetX, debtY)
+        }
+      }
+    }
+
     return doc
   }
 
@@ -250,6 +418,7 @@ function App() {
         iznos: form.iznos,
         pozivNaBroj: form.pozivNaBroj,
         racunZa: form.racunZa,
+        trackingData,
       })
       const filename = `${form.nazivFajla.trim() || 'uplatnica'}.pdf`
       doc.save(filename)
@@ -260,6 +429,16 @@ function App() {
       setLoading(false)
     }
   }
+
+const arrayBufferToBase64 = (buffer) => {
+  let binary = ''
+  const bytes = new Uint8Array(buffer)
+  const len = bytes.byteLength
+  for (let i = 0; i < len; i += 1) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return window.btoa(binary)
+}
 
 const handleBulkSubmit = async (event) => {
   event.preventDefault()
@@ -272,6 +451,7 @@ const handleBulkSubmit = async (event) => {
       throw new Error('Unesite pattern za poziv na broj.')
     }
 
+    const files = []
     for (let i = 1; i <= apartmentCount; i += 1) {
       const stan = String(i).padStart(2, '0')
       const poziv = `${bulkForm.bulkPozivPattern}${stan}`
@@ -285,12 +465,33 @@ const handleBulkSubmit = async (event) => {
         iznos: form.iznos,
         pozivNaBroj: poziv,
         racunZa: bulkForm.racunZa,
+        trackingData,
       })
 
-      doc.save(`racun_stan_${stan}.pdf`)
+      if (bulkForm.folderPath.trim()) {
+        const dataUri = doc.output('datauristring')
+        const base64 = dataUri.split(',')[1]
+        files.push({ name: `racun_stan_${stan}.pdf`, data: base64 })
+      } else {
+        doc.save(`racun_stan_${stan}.pdf`)
+      }
     }
 
-    setStatus(`Generisano je ${apartmentCount} PDF računa.`)
+    if (bulkForm.folderPath.trim()) {
+      const response = await fetch(`${backendUrl}/api/save-pdfs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderPath: bulkForm.folderPath.trim(), files }),
+      })
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Ne mogu da sačuvam fajlove na serveru.')
+      }
+      const result = await response.json()
+      setStatus(`Generisano je ${apartmentCount} PDF fajlova i sačuvano u ${bulkForm.folderPath.trim()}.`)
+    } else {
+      setStatus(`Generisano je ${apartmentCount} PDF računa.`)
+    }
   } catch (submitError) {
     setError(submitError.message || 'Došlo je do greške prilikom generisanja PDF fajlova.')
   } finally {
@@ -310,6 +511,9 @@ const handleBulkSubmit = async (event) => {
           </button>
           <button type="button" className={mode === 'bulk' ? 'active' : ''} onClick={() => setMode('bulk')}>
             Generiši sve račune
+          </button>
+          <button type="button" className={mode === 'tracking' ? 'active' : ''} onClick={() => setMode('tracking')}>
+            Dugovanja
           </button>
         </div>
 
@@ -364,7 +568,7 @@ const handleBulkSubmit = async (event) => {
               {loading ? 'Generišem...' : 'Generiši PDF'}
             </button>
           </form>
-        ) : (
+        ) : mode === 'bulk' ? (
           <form onSubmit={handleBulkSubmit}>
             <div className="row row-4">
               <label>
@@ -415,6 +619,67 @@ const handleBulkSubmit = async (event) => {
               {loading ? 'Generišem...' : 'Generiši sve račune'}
             </button>
           </form>
+        ) : (
+          <div>
+            <div className="row tracking-row">
+              <label>
+                Stan
+                <select name="stan" value={selectedTracking.stan} onChange={handleTrackingSelectChange}>
+                  {Array.from({ length: apartmentCount }, (_, i) => (
+                    <option key={i} value={String(i + 1).padStart(2, '0')}>
+                      {i + 1}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Godina
+                <select name="year" value={selectedTracking.year} onChange={handleTrackingSelectChange}>
+                  {Array.from({ length: 6 }, (_, i) => 2025 + i).map((year) => (
+                    <option key={year} value={String(year)}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Status
+                <input value={`${selectedTracking.stan} / ${selectedTracking.year}`} disabled />
+              </label>
+            </div>
+
+            <div className="row tracking-row">
+              <label>
+                Učitaj iz txt
+                <input type="file" accept=".txt" onChange={handleTrackingFileChange} />
+              </label>
+              <label>
+                Učitaj iz repo
+                <button type="button" onClick={loadTrackingFromRepo}>Učitaj src/dugovanja.txt</button>
+              </label>
+              <label>
+                Fajl
+                <input value={loadedTrackingFileName} disabled />
+              </label>
+            </div>
+
+            <div className="tracking-months">
+              {['Jan', 'Feb', 'Mar', 'Apr', 'Maj', 'Jun', 'Jul', 'Avg', 'Sep', 'Okt', 'Nov', 'Dec'].map((month, index) => (
+                <label key={month} className="tracking-month-label">
+                  <input
+                    type="checkbox"
+                    checked={checkedMonths[index]}
+                    onChange={() => toggleMonth(index)}
+                  />
+                  <span>{month}</span>
+                </label>
+              ))}
+            </div>
+
+            <button type="button" disabled={loading} onClick={saveTracking}>
+              {loading ? 'Čuvam...' : 'Sačuvaj dugovanja'}
+            </button>
+          </div>
         )}
 
         {status && <div className="status">{status}</div>}

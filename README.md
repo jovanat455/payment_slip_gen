@@ -17,7 +17,13 @@ This template provides a minimal setup to get React working in Vite with HMR and
    npm run dev
    ```
 
-4. Open the app in your browser at:
+4. If you want to save `src/dugovanja.txt` directly from the app, also start the backend server in another terminal:
+
+   ```bash
+   npm run backend
+   ```
+
+5. Open the app in your browser at:
 
    ```text
    http://localhost:5173/

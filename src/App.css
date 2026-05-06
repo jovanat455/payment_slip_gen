@@ -66,6 +66,37 @@ form {
   margin-bottom: 18px;
 }
 
+.tracking-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  align-items: end;
+}
+
+.tracking-months {
+  display: grid;
+  gap: 8px;
+}
+
+.tracking-month-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.tracking-month-label input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+}
+
+input[type='file'] {
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #f9fafb;
+}
+
 .mode-switch button {
   background: #e5e7eb;
   color: #111827;
