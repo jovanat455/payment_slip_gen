@@ -134,6 +134,37 @@ function App() {
     setCheckedMonths(entry ? entry : Array(12).fill(false))
   }, [selectedTracking, trackingData])
 
+  useEffect(() => {
+    const pattern = bulkForm.bulkPozivPattern.trim()
+    if (pattern.length === 4) {
+      const monthNum = pattern.slice(0, 2)
+      const yearShort = pattern.slice(2, 4)
+      const monthNames = {
+        '01': 'januar',
+        '02': 'februar',
+        '03': 'mart',
+        '04': 'april',
+        '05': 'maj',
+        '06': 'jun',
+        '07': 'jul',
+        '08': 'avgust',
+        '09': 'septembar',
+        '10': 'oktobar',
+        '11': 'novembar',
+        '12': 'decembar'
+      }
+      const monthName = monthNames[monthNum]
+      if (monthName) {
+        const yearFull = `20${yearShort}`
+        setBulkForm(prev => ({
+          ...prev,
+          racunZa: `${monthName} ${yearFull}. godine`,
+          svrha: `Račun za ${monthNum}-${yearShort}`
+        }))
+      }
+    }
+  }, [bulkForm.bulkPozivPattern])
+
   const saveTracking = async () => {
     const confirmed = window.confirm('Da li ste sigurni da želite da sačuvate dugovanja?')
     if (!confirmed) return
