@@ -1,0 +1,3 @@
+.\racuni.ps1 -InputFolder "E:\stambena zajednica\racuni\2026\2026_april" `
+             -OutputFile "E:\stambena zajednica\racuni\2026\2026_april\racuni_april_2026.pdf" `
+             -ExcludeStan 8
