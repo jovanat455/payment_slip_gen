@@ -571,7 +571,7 @@ const handleBulkSubmit = async (event) => {
                 <input name="nazivFajla" value={form.nazivFajla} onChange={handleChange} />
               </label>
               <label>
-                Path gde se čuva
+                Lokacija za čuvanje
                 <input name="pathSacuvavanja" value={form.pathSacuvavanja || ''} onChange={handleChange} placeholder="racuni/" />
               </label>
             </div>
@@ -610,7 +610,7 @@ const handleBulkSubmit = async (event) => {
 
             <div className="row row-2">
               <label>
-                Folder gde se čuva (path)
+                Lokacija za čuvanje
                 <input name="folderPath" value={bulkForm.folderPath} onChange={handleBulkChange} placeholder="racuni/mart2026" />
               </label>
             </div>
@@ -661,8 +661,14 @@ const handleBulkSubmit = async (event) => {
                 <input type="file" accept=".txt" onChange={handleTrackingFileChange} />
               </label>
               <label>
-                Učitaj iz repo
-                <button type="button" onClick={loadTrackingFromRepo}>Učitaj src/dugovanja.txt</button>
+                Učitaj postojeća dugovanja
+                <button
+                  type="button"
+                  className="primary-gradient-button"
+                  onClick={loadTrackingFromRepo}
+                >
+                  Učitaj src/dugovanja.txt
+                </button>
               </label>
               <label>
                 Fajl
@@ -683,7 +689,12 @@ const handleBulkSubmit = async (event) => {
               ))}
             </div>
 
-            <button type="button" disabled={loading} onClick={saveTracking}>
+            <button
+              type="button"
+              className="primary-gradient-button"
+              disabled={loading}
+              onClick={saveTracking}
+            >
               {loading ? 'Čuvam...' : 'Sačuvaj dugovanja'}
             </button>
           </div>
