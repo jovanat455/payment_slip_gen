@@ -47,6 +47,49 @@ The production build files are generated in the `dist/` folder.
 - Main component: `src/App.jsx`
 - Styles: `src/index.css` and `src/App.css`
 
+### Data files format
+
+#### `src/dugovanja.txt` - Debt tracking file
+
+Format: `STAN|YEAR|MONTHS`
+
+Example:
+```
+01|2025|1,1,1,1,1,1,1,1,1,1,1,1
+01|2026|1,0,0,0,0,0,0,0,0,0,0,0
+02|2025|1,1,1,1,1,1,1,1,1,1,1,1
+02|2026|1,1,1,0,0,0,0,0,0,0,0,0
+```
+
+- `STAN`: Apartment number (01-11)
+- `YEAR`: Year (2025, 2026, etc.)
+- `MONTHS`: Comma-separated 12 values (1 = paid, 0 = unpaid) for January-December
+
+#### `src/dodatni_troskovi.txt` - Additional costs file
+
+Format: Blocks separated by `====`, each containing:
+
+```
+====
+stavka: item description
+stanovi: 01,05,07,08,11
+dodatan trosak: 5000
+====
+stavka: another item
+stanovi: 03,03,07
+dodatan trosak: 2000
+====
+```
+
+- `stavka`: Description of additional cost item
+- `stanovi`: Comma-separated list of apartments (can repeat for multiple payments per apartment)
+- `dodatan trosak`: Amount in dinars
+
+**Example with duplicate apartments:**
+Stan 03 appears twice, so it will be charged 2×2000 = 4000 dinars for that item.
+
+**If file is empty or missing:** No additional costs are added to invoices.
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)

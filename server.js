@@ -71,6 +71,19 @@ app.post('/api/save-pdfs', (req, res) => {
   }
 })
 
+app.get('/api/dodatni-troskovi', (req, res) => {
+  const filePath = path.join(process.cwd(), 'src', 'dodatni_troskovi.txt')
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send('')
+  }
+  fs.readFile(filePath, 'utf8', (err, data) => {
+    if (err) {
+      return res.status(500).json({ error: 'Ne mogu da otvorim src/dodatni_troskovi.txt' })
+    }
+    res.type('text/plain').send(data)
+  })
+})
+
 const port = 3000
 app.listen(port, () => {
   console.log(`Backend server is running at http://localhost:${port}`)

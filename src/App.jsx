@@ -43,6 +43,7 @@ function App() {
   const [selectedTracking, setSelectedTracking] = useState({ stan: '1', year: '2025' })
   const [checkedMonths, setCheckedMonths] = useState(Array(12).fill(false))
   const [loadedTrackingFileName, setLoadedTrackingFileName] = useState('dugovanja.txt')
+  const [dodatniTroskovi, setDodatniTroskovi] = useState([])
   const backendUrl = 'http://localhost:3000'
 
   const handleChange = (event) => {
@@ -95,6 +96,19 @@ function App() {
     setStatus(`Učitano ${file.name}.`)
   }
 
+  const parseDodatniTroskovi = (text) => {
+    const blocks = text.split('====').map(b => b.trim()).filter(b => b)
+    return blocks.map(block => {
+      const lines = block.split('\n').map(l => l.trim()).filter(l => l)
+      const stavka = lines.find(l => l.startsWith('stavka:'))?.split(':')[1]?.trim()
+      const stanoviStr = lines.find(l => l.startsWith('stanovi:'))?.split(':')[1]?.trim()
+      const stanovi = stanoviStr ? stanoviStr.split(',').map(s => s.trim()) : []
+      const trosakStr = lines.find(l => l.startsWith('dodatan trosak:'))?.split(':')[1]?.trim()
+      const trosak = Number(trosakStr) || 0
+      return { stavka, stanovi, trosak }
+    }).filter(item => item.stavka && item.trosak > 0)
+  }
+
   const loadTrackingFromRepo = async () => {
     try {
       const res = await fetch(`${backendUrl}/api/dugovanja`)
@@ -123,8 +137,24 @@ function App() {
     URL.revokeObjectURL(url)
   }
 
+  const loadDodatniTroskovi = async () => {
+    try {
+      const res = await fetch(`${backendUrl}/api/dodatni-troskovi`)
+      if (!res.ok) {
+        setDodatniTroskovi([])
+        return
+      }
+      const text = await res.text()
+      const parsed = parseDodatniTroskovi(text)
+      setDodatniTroskovi(parsed)
+    } catch {
+      setDodatniTroskovi([])
+    }
+  }
+
   useEffect(() => {
     loadTrackingFromRepo()
+    loadDodatniTroskovi()
   }, [])
 
   useEffect(() => {
@@ -210,12 +240,13 @@ function App() {
     return cleaned
   }
 
-  const createInvoiceDoc = async ({ primalac, svrha, stanjeNaRacunu, vanredniTroskovi, racun, iznos, pozivNaBroj, racunZa, trackingData }) => {
-    const amount = Number(iznos.replace(',', '.'))
-    if (Number.isNaN(amount) || amount <= 0) {
+  const createInvoiceDoc = async ({ primalac, svrha, stanjeNaRacunu, vanredniTroskovi, racun, iznos, pozivNaBroj, racunZa, trackingData, dodatniTrosak = 0, dodatneStavke = [] }) => {
+    const baseAmount = Number(iznos.replace(',', '.'))
+    if (Number.isNaN(baseAmount) || baseAmount <= 0) {
       throw new Error('Iznos mora biti pozitivan broj.')
     }
 
+    const amount = baseAmount + dodatniTrosak
     const iznosRsd = amount.toFixed(2).replace('.', ',')
     const iban = racun.replace(/\s|-/g, '').toUpperCase()
     const poziv = pozivNaBroj.trim()
@@ -255,26 +286,30 @@ function App() {
     const tableWidth = contentWidth * 0.5
     const rowHeight = 22
     const col1Width = tableWidth * 0.75
-    const rows = 3
+    const stavke = [
+      ['Fond za tekuće održavanje zgrade', '1100'],
+      ['Čišćenje zgrade', '400'],
+      ['Održavanje lifta', '455'],
+      ...dodatneStavke.map(s => [s.stavka, s.trosak.toString()])
+    ]
+    const rows = stavke.length
 
     doc.setDrawColor(0)
     doc.setLineWidth(0.5)
     doc.rect(tableX, tableY, tableWidth, rowHeight * rows)
     doc.line(tableX + col1Width, tableY, tableX + col1Width, tableY + rowHeight * rows)
-    doc.line(tableX, tableY + rowHeight, tableX + tableWidth, tableY + rowHeight)
-    doc.line(tableX, tableY + rowHeight * 2, tableX + tableWidth, tableY + rowHeight * 2)
-    doc.line(tableX, tableY + rowHeight * 3, tableX + tableWidth, tableY + rowHeight * 3)
+    for (let i = 1; i <= rows; i += 1) {
+      doc.line(tableX, tableY + rowHeight * i, tableX + tableWidth, tableY + rowHeight * i)
+    }
 
     doc.setFont('Verdana', 'normal')
-    doc.text('Fond za tekuće održavanje zgrade', tableX + 6, tableY + 15)
-    doc.text('1100', tableX + col1Width + 8, tableY + 15)
-    doc.text('Čišćenje zgrade', tableX + 6, tableY + rowHeight + 15)
-    doc.text('400', tableX + col1Width + 8, tableY + rowHeight + 15)
-    doc.text('Održavanje lifta', tableX + 6, tableY + rowHeight * 2 + 15)
-    doc.text('455', tableX + col1Width + 8, tableY + rowHeight * 2 + 15)
+    stavke.forEach((stavka, idx) => {
+      doc.text(stavka[0], tableX + 6, tableY + rowHeight * idx + 15)
+      doc.text(stavka[1], tableX + col1Width + 8, tableY + rowHeight * idx + 15)
+    })
 
     const formX = margin + (contentWidth * 0.05)
-    const formY = tableY + rowHeight * 4 + 90
+    const formY = tableY + rowHeight * rows + 90
     const formWidth = contentWidth * 0.9
     const formHeight = 260
     doc.setLineWidth(1)
@@ -502,10 +537,17 @@ const handleBulkSubmit = async (event) => {
       throw new Error('Unesite pattern za poziv na broj.')
     }
 
+    await loadDodatniTroskovi()
+    await loadTrackingFromRepo()
+
     const files = []
     for (let i = 1; i <= apartmentCount; i += 1) {
       const stan = String(i).padStart(2, '0')
       const poziv = `${bulkForm.bulkPozivPattern}${stan}`
+
+      const dodatneZaStan = dodatniTroskovi.filter(dt => dt.stanovi.includes(stan))
+      const dodatniTrosak = dodatneZaStan.reduce((sum, dt) => sum + dt.trosak, 0)
+      const dodatneStavke = dodatneZaStan.map(dt => ({ stavka: dt.stavka, trosak: dt.trosak }))
 
       const doc = await createInvoiceDoc({
         primalac: form.primalac,
@@ -517,6 +559,8 @@ const handleBulkSubmit = async (event) => {
         pozivNaBroj: poziv,
         racunZa: bulkForm.racunZa,
         trackingData,
+        dodatniTrosak,
+        dodatneStavke,
       })
 
       if (bulkForm.folderPath.trim()) {
