@@ -14,6 +14,7 @@ const initialState = {
   uplatioc: '',
   nazivFajla: 'uplatnica',
   racunZa: 'januar 2026. godine',
+  pathSacuvavanja: '',
 }
 
 const initialBulkState = {
@@ -421,8 +422,27 @@ function App() {
         trackingData,
       })
       const filename = `${form.nazivFajla.trim() || 'uplatnica'}.pdf`
-      doc.save(filename)
-      setStatus(`PDF je generisan i preuzet kao ${filename}.`)
+
+      if (form.pathSacuvavanja && form.pathSacuvavanja.trim()) {
+        const dataUri = doc.output('datauristring')
+        const base64 = dataUri.split(',')[1]
+        const response = await fetch(`${backendUrl}/api/save-pdfs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            folderPath: form.pathSacuvavanja.trim(),
+            files: [{ name: filename, data: base64 }],
+          }),
+        })
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || 'Ne mogu da sačuvam fajl na serveru.')
+        }
+        setStatus(`PDF je sačuvan kao ${filename} u ${form.pathSacuvavanja.trim()}.`)
+      } else {
+        doc.save(filename)
+        setStatus(`PDF je generisan i preuzet kao ${filename}.`)
+      }
     } catch (submitError) {
       setError(submitError.message || 'Došlo je do greške prilikom generisanja PDF-a.')
     } finally {
@@ -519,7 +539,7 @@ const handleBulkSubmit = async (event) => {
 
         {mode === 'single' ? (
           <form onSubmit={handleSingleSubmit}>
-            <div className="row row-4">
+            <div className="row row-3">
               <label>
                 Račun za
                 <input name="racunZa" value={form.racunZa} onChange={handleChange} />
@@ -529,38 +549,30 @@ const handleBulkSubmit = async (event) => {
                 <input name="stanjeNaRacunu" value={form.stanjeNaRacunu} onChange={handleChange} />
               </label>
               <label>
-                Vanredni troškovi
-                <input name="vanredniTroskovi" value={form.vanredniTroskovi} onChange={handleChange} />
-              </label>
-              <label>
-                Naziv fajla
-                <input name="nazivFajla" value={form.nazivFajla} onChange={handleChange} />
-              </label>
-            </div>
-
-            <div className="row row-4">
-              <label>
                 Svrha uplate
                 <input name="svrha" value={form.svrha} onChange={handleChange} placeholder="Unesite svrhu uplate" />
               </label>
-              <label>
-                Račun primaoca
-                <input name="racun" value={form.racun} disabled />
-              </label>
-              <label>
-                Primalac
-                <input name="primalac" value={form.primalac} onChange={handleChange} />
-              </label>
+            </div>
+
+            <div className="row row-split-3">
               <label>
                 Poziv na broj
                 <input name="pozivNaBroj" value={form.pozivNaBroj} onChange={handleChange} />
+              </label>
+              <label>
+                Vanredni troškovi
+                <input name="vanredniTroskovi" value={form.vanredniTroskovi} onChange={handleChange} />
               </label>
             </div>
 
             <div className="row">
               <label>
-                Model
-                <input value="00" disabled />
+                Naziv fajla
+                <input name="nazivFajla" value={form.nazivFajla} onChange={handleChange} />
+              </label>
+              <label>
+                Path gde se čuva
+                <input name="pathSacuvavanja" value={form.pathSacuvavanja || ''} onChange={handleChange} placeholder="racuni/" />
               </label>
             </div>
 
@@ -570,7 +582,7 @@ const handleBulkSubmit = async (event) => {
           </form>
         ) : mode === 'bulk' ? (
           <form onSubmit={handleBulkSubmit}>
-            <div className="row row-4">
+            <div className="row row-3">
               <label>
                 Račun za
                 <input name="racunZa" value={bulkForm.racunZa} onChange={handleBulkChange} />
@@ -580,31 +592,26 @@ const handleBulkSubmit = async (event) => {
                 <input name="stanjeNaRacunu" value={bulkForm.stanjeNaRacunu} onChange={handleBulkChange} />
               </label>
               <label>
-                Vanredni troškovi
-                <input name="vanredniTroskovi" value={bulkForm.vanredniTroskovi} onChange={handleBulkChange} />
-              </label>
-              <label>
-                Folder gde se čuva (path)
-                <input name="folderPath" value={bulkForm.folderPath} onChange={handleBulkChange} placeholder="racuni/mart2026" />
-              </label>
-            </div>
-
-            <div className="row row-4">
-              <label>
                 Svrha uplate
                 <input name="svrha" value={bulkForm.svrha} onChange={handleBulkChange} placeholder="Unesite svrhu uplate" />
               </label>
+            </div>
+
+            <div className="row row-split-3">
               <label>
                 Pattern poziva
                 <input name="bulkPozivPattern" value={bulkForm.bulkPozivPattern} onChange={handleBulkChange} placeholder="0326" />
               </label>
               <label>
-                Račun primaoca
-                <input value={form.racun} disabled />
+                Vanredni troškovi
+                <input name="vanredniTroskovi" value={bulkForm.vanredniTroskovi} onChange={handleBulkChange} />
               </label>
+            </div>
+
+            <div className="row row-2">
               <label>
-                Model
-                <input value="00" disabled />
+                Folder gde se čuva (path)
+                <input name="folderPath" value={bulkForm.folderPath} onChange={handleBulkChange} placeholder="racuni/mart2026" />
               </label>
             </div>
 
@@ -665,14 +672,14 @@ const handleBulkSubmit = async (event) => {
 
             <div className="tracking-months">
               {['Jan', 'Feb', 'Mar', 'Apr', 'Maj', 'Jun', 'Jul', 'Avg', 'Sep', 'Okt', 'Nov', 'Dec'].map((month, index) => (
-                <label key={month} className="tracking-month-label">
+                <div key={month} className="tracking-month-label">
                   <input
                     type="checkbox"
                     checked={checkedMonths[index]}
                     onChange={() => toggleMonth(index)}
                   />
                   <span>{month}</span>
-                </label>
+                </div>
               ))}
             </div>
 
@@ -682,8 +689,18 @@ const handleBulkSubmit = async (event) => {
           </div>
         )}
 
-        {status && <div className="status">{status}</div>}
-        {error && <div className="error">{error}</div>}
+        {status && (
+          <div className="status">
+            <span>{status}</span>
+            <button type="button" className="close-btn" onClick={() => setStatus('')}>×</button>
+          </div>
+        )}
+        {error && (
+          <div className="error">
+            <span>{error}</span>
+            <button type="button" className="close-btn" onClick={() => setError('')}>×</button>
+          </div>
+        )}
       </div>
     </div>
   )
