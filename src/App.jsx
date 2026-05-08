@@ -528,6 +528,58 @@ const handleBulkSubmit = async (event) => {
       }
     }
 
+    // Reload tracking data before generating summary
+    await loadTrackingFromRepo()
+
+    // Generate summary
+    const currentMonth = bulkForm.bulkPozivPattern.slice(0, 2)
+    const currentYear = bulkForm.bulkPozivPattern.slice(2, 4)
+    const currM = Number(currentMonth)
+    const currY = Number(currentYear)
+    const summaryLines = []
+    summaryLines.push('Dugovanja')
+    summaryLines.push('=====================')
+    let totalAll = 0
+    for (let i = 1; i <= apartmentCount; i += 1) {
+      const stan = String(i).padStart(2, '0')
+      const unpaidMonths = []
+      let totalStan = 0
+      Object.keys(trackingData).forEach(key => {
+        if (key.startsWith(`${stan}|`)) {
+          const [, year] = key.split('|')
+          const months = trackingData[key]
+          months.forEach((paid, idx) => {
+            if (!paid) {
+              const month = String(idx + 1).padStart(2, '0')
+              const monthKey = `${month}-${year.slice(-2)}`
+              const [m, y] = monthKey.split('-').map(Number)
+              if (y < currY || (y === currY && m < currM)) {
+                unpaidMonths.push(monthKey)
+                totalStan += 1955
+              }
+            }
+          })
+        }
+      })
+      unpaidMonths.sort()
+      if (unpaidMonths.length === 0) {
+        summaryLines.push(`stan ${i}: sve placeno`)
+      } else {
+        summaryLines.push(`stan ${i}: ${unpaidMonths.join(', ')}; ukupno = ${totalStan} dinara`)
+      }
+      totalAll += totalStan
+    }
+    summaryLines.push('')
+    summaryLines.push('======================')
+    summaryLines.push(`Ukupno dugovanje svih stanara: ${totalAll} dinara`)
+    const summaryText = summaryLines.join('\n')
+
+    if (bulkForm.folderPath.trim()) {
+      files.push({ name: 'summary.txt', data: btoa(summaryText) })
+    } else {
+      downloadBlob(new Blob([summaryText], { type: 'text/plain;charset=utf-8' }), 'summary.txt')
+    }
+
     if (bulkForm.folderPath.trim()) {
       const response = await fetch(`${backendUrl}/api/save-pdfs`, {
         method: 'POST',
@@ -539,9 +591,9 @@ const handleBulkSubmit = async (event) => {
         throw new Error(errorData.error || 'Ne mogu da sačuvam fajlove na serveru.')
       }
       const result = await response.json()
-      setStatus(`Generisano je ${apartmentCount} PDF fajlova i sačuvano u ${bulkForm.folderPath.trim()}.`)
+      setStatus(`Generisano je ${apartmentCount} PDF fajlova i summary.txt fajl sačuvano u ${bulkForm.folderPath.trim()}.`)
     } else {
-      setStatus(`Generisano je ${apartmentCount} PDF računa.`)
+      setStatus(`Generisano je ${apartmentCount} PDF računa i summary.txt fajl.`)
     }
   } catch (submitError) {
     setError(submitError.message || 'Došlo je do greške prilikom generisanja PDF fajlova.')
