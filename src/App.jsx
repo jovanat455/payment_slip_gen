@@ -576,7 +576,7 @@ const handleBulkSubmit = async (event) => {
               </label>
             </div>
 
-            <button type="submit" disabled={loading}>
+            <button type="submit" className="primary-gradient-button" disabled={loading}>
               {loading ? 'Generišem...' : 'Generiši PDF'}
             </button>
           </form>
@@ -622,7 +622,7 @@ const handleBulkSubmit = async (event) => {
                 </p>
             </div>
 
-            <button type="submit" disabled={loading}>
+            <button type="submit" className="primary-gradient-button" disabled={loading}>
               {loading ? 'Generišem...' : 'Generiši sve račune'}
             </button>
           </form>

@@ -145,12 +145,17 @@ input[type='file'] {
   left: 100%;
 }
 
+.primary-gradient-button,
 .mode-switch button.active {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: #ffffff;
-  border-color: #667eea;
+  border: 2px solid #667eea;
   box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
   transform: translateY(-2px);
+}
+
+.primary-gradient-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
 .mode-switch button:hover:not(.active) {
