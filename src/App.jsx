@@ -43,7 +43,14 @@ function App() {
   const [selectedTracking, setSelectedTracking] = useState({ stan: '1', year: '2025' })
   const [checkedMonths, setCheckedMonths] = useState(Array(12).fill(false))
   const [loadedTrackingFileName, setLoadedTrackingFileName] = useState('dugovanja.txt')
-  const [dodatniTroskovi, setDodatniTroskovi] = useState([])
+  const [additionalCostsByMonth, setAdditionalCostsByMonth] = useState({})
+  const [newAdditionalCostForm, setNewAdditionalCostForm] = useState({
+    month: '01',
+    year: '2026',
+    stavka: '',
+    stanovi: Array(apartmentCount).fill(false),
+    cena: ''
+  })
   const backendUrl = 'http://localhost:3000'
 
   const handleChange = (event) => {
@@ -121,6 +128,7 @@ function App() {
       window.localStorage.setItem('dugovanja', JSON.stringify(nextData))
       setLoadedTrackingFileName('dugovanja.txt')
       setStatus('Učitano dugovanja iz repo fajla.')
+      await loadDodatniTroskoviDugovanja()
     } catch (err) {
       setError('Ne mogu da učitam src/dugovanja.txt. Pokreni backend.')
     }
@@ -137,24 +145,148 @@ function App() {
     URL.revokeObjectURL(url)
   }
 
-  const loadDodatniTroskovi = async () => {
+
+  const parseDodatniTroskoviDugovanja = (text) => {
+    const nextData = {}
+    text.split(/\r?\n/).forEach((line) => {
+      const trimmed = line.trim()
+      if (!trimmed) return
+      const parts = trimmed.split('|')
+      if (parts.length < 5) return
+      const [stan, yearMonth, stavka, amountStr, paidStr] = parts
+      if (!stan || !yearMonth || !stavka || !amountStr) return
+      const amount = Number(amountStr)
+      const paid = paidStr === '1'
+      if (Number.isNaN(amount)) return
+      const stanPadded = stan.padStart(2, '0')
+      const key = `${stanPadded}|${yearMonth}`
+      if (!nextData[key]) {
+        nextData[key] = []
+      }
+      nextData[key].push({ stavka, amount, paid })
+    })
+    return nextData
+  }
+
+  const loadDodatniTroskoviDugovanja = async () => {
     try {
-      const res = await fetch(`${backendUrl}/api/dodatni-troskovi`)
+      const res = await fetch(`${backendUrl}/api/dodatni-troskovi-dugovanja`)
       if (!res.ok) {
-        setDodatniTroskovi([])
+        setAdditionalCostsByMonth({})
         return
       }
       const text = await res.text()
-      const parsed = parseDodatniTroskovi(text)
-      setDodatniTroskovi(parsed)
+      const nextData = parseDodatniTroskoviDugovanja(text)
+      setAdditionalCostsByMonth(nextData)
+      window.localStorage.setItem('dugovanja_dodatni_troskovi', JSON.stringify(nextData))
     } catch {
-      setDodatniTroskovi([])
+      setAdditionalCostsByMonth({})
     }
+  }
+
+  const saveDodatniTroskoviDugovanja = async () => {
+    const lines = Object.entries(additionalCostsByMonth)
+      .flatMap(([k, stavke]) =>
+        stavke.map((s) => {
+          const paidStr = s.paid ? '1' : '0'
+          return `${k}|${s.stavka}|${s.amount}|${paidStr}`
+        })
+      )
+
+    const text = lines.join('\n')
+
+    try {
+      const res = await fetch(`${backendUrl}/api/save-dodatni-troskovi-dugovanja`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      })
+
+      if (!res.ok) {
+        throw new Error('Backend nije dostupan')
+      }
+
+      setStatus('Dodatni troškovi su ažurirani.')
+    } catch (err) {
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+      downloadBlob(blob, 'dugovanja_dodatni_troskovi.txt')
+      setStatus('Dodatni troškovi sačuvani lokalno.')
+    }
+  }
+
+  const addNewAdditionalCost = async () => {
+    if (!newAdditionalCostForm.stavka.trim() || !newAdditionalCostForm.cena.trim()) {
+      setError('Unesite naziv stavke i cenu.')
+      return
+    }
+
+    const amount = Number(newAdditionalCostForm.cena)
+    if (Number.isNaN(amount) || amount <= 0) {
+      setError('Cena mora biti pozitivan broj.')
+      return
+    }
+
+    const selectedStanovi = newAdditionalCostForm.stanovi
+      .map((checked, idx) => checked ? String(idx + 1).padStart(2, '0') : null)
+      .filter(Boolean)
+
+    if (selectedStanovi.length === 0) {
+      setError('Izaberite bar jedan stan.')
+      return
+    }
+
+    const yearMonth = `${newAdditionalCostForm.year}-${newAdditionalCostForm.month}`
+    const nextData = { ...additionalCostsByMonth }
+    const newLines = []
+
+    selectedStanovi.forEach((stan) => {
+      const key = `${stan}|${yearMonth}`
+      if (!nextData[key]) {
+        nextData[key] = []
+      }
+      const newEntry = {
+        stavka: newAdditionalCostForm.stavka,
+        amount,
+        paid: false
+      }
+      nextData[key].push(newEntry)
+      const paidStr = newEntry.paid ? '1' : '0'
+      newLines.push(`${stan}|${yearMonth}|${newEntry.stavka}|${newEntry.amount}|${paidStr}`)
+    })
+
+    setAdditionalCostsByMonth(nextData)
+    window.localStorage.setItem('dugovanja_dodatni_troskovi', JSON.stringify(nextData))
+
+    // Appenduj samo nove redove na backend
+    for (const line of newLines) {
+      try {
+        const res = await fetch(`${backendUrl}/api/append-dodatni-troskovi-dugovanja`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ line }),
+        })
+        if (!res.ok) {
+          throw new Error('Backend nije dostupan')
+        }
+      } catch (err) {
+        setError(`Nije moguće da appendujem na server, ali je sačuvano lokalno.`)
+        return
+      }
+    }
+
+    setNewAdditionalCostForm({ 
+      month: '01',
+      year: '2026',
+      stavka: '',
+      stanovi: Array(apartmentCount).fill(false),
+      cena: ''
+    })
+    setStatus('Dodatni trosak je dodat i sačuvan.')
+    setError('')
   }
 
   useEffect(() => {
     loadTrackingFromRepo()
-    loadDodatniTroskovi()
   }, [])
 
   useEffect(() => {
@@ -226,6 +358,8 @@ function App() {
       downloadBlob(blob, filename)
       setStatus(`Dugovanja sačuvana lokalno kao ${filename}.`) 
     }
+    
+    await saveDodatniTroskoviDugovanja()
   }
 
   const buildQrText = ({ iban, iznos, poziv, primalac, svrha }) => {
@@ -240,11 +374,24 @@ function App() {
     return cleaned
   }
 
-  const createInvoiceDoc = async ({ primalac, svrha, stanjeNaRacunu, vanredniTroskovi, racun, iznos, pozivNaBroj, racunZa, trackingData, dodatniTrosak = 0, dodatneStavke = [] }) => {
-    const baseAmount = Number(iznos.replace(',', '.'))
-    if (Number.isNaN(baseAmount) || baseAmount <= 0) {
-      throw new Error('Iznos mora biti pozitivan broj.')
-    }
+    const createInvoiceDoc = async ({
+      primalac,
+      svrha,
+      stanjeNaRacunu,
+      vanredniTroskovi,
+      racun,
+      iznos,
+      pozivNaBroj,
+      racunZa,
+      trackingData,
+      additionalCostsByMonth = {},
+      dodatniTrosak = 0,
+      dodatneStavke = [],
+    }) => {
+      const baseAmount = Number(iznos.replace(',', '.'))
+      if (Number.isNaN(baseAmount) || baseAmount <= 0) {
+        throw new Error('Iznos mora biti pozitivan broj.')
+      }
 
     const amount = baseAmount + dodatniTrosak
     const iznosRsd = amount.toFixed(2).replace('.', ',')
@@ -444,17 +591,56 @@ function App() {
             })
           }
         }
+
+
+        const unpaidAdditional = []
+
+        Object.entries(additionalCostsByMonth).forEach(([key, troskovi]) => {
+          const [keyStan, yearMonth] = key.split('|')
+          if (keyStan !== stanStr) return
+
+          const [addYear, addMonth] = yearMonth.split('-')
+          const addYearNum = Number(addYear)
+          const addMonthNum = Number(addMonth)
+
+          const beforeCurrent =
+            addYearNum < year || (addYearNum === year && addMonthNum < month)
+
+          if (beforeCurrent) {
+            troskovi.forEach((trosak) => {
+              if (!trosak.paid) {
+                unpaidAdditional.push({
+                  month: addMonth,
+                  year: addYear,
+                  stavka: trosak.stavka,
+                  amount: trosak.amount,
+                })
+              }
+            })
+          }
+        })
+
         let debtY = footerY + 80
         doc.setFont('Verdana', 'bold')
         doc.setFontSize(10)
-        if (unpaid.length > 0) {
-          const total = unpaid.length * 1955
+        if (unpaid.length > 0 || unpaidAdditional.length > 0) {
+          const total =
+            unpaid.length * 1955 +
+            unpaidAdditional.reduce((sum, item) => sum + item.amount, 0)
           doc.text('Neplaćeni racuni:', margin + topOffsetX, debtY)
           debtY += 15
           doc.setFont('Verdana', 'normal')
           doc.setFontSize(9)
           unpaid.forEach(line => {
             doc.text(line, margin + topOffsetX + 10, debtY)
+            debtY += 12
+          })
+          unpaidAdditional.forEach(item => {
+            doc.text(
+              `${item.month}-${item.year}: ${item.stavka} - ${item.amount} dinara`,
+              margin + topOffsetX + 10,
+              debtY
+            )
             debtY += 12
           })
           debtY += 10
@@ -476,6 +662,23 @@ function App() {
     setLoading(true)
 
     try {
+      // Ekstrahuj stan broj iz poslednje dve cifre poziva na broj
+      const stan = form.pozivNaBroj.slice(-2).padStart(2, '0')
+      const monthPart = form.pozivNaBroj.slice(-6, -2)
+      const moMonth = monthPart.slice(0, 2)
+      const moYear = monthPart.slice(2, 4)
+      const yearMonth = `${moYear ? `20${moYear}` : new Date().getFullYear()}-${moMonth}`
+      
+      // Pronađi dodatne troškove za ovaj stan i mesec
+      const additionalCostsKey = `${stan}|${yearMonth}`
+      const additionalCostsForMonth = additionalCostsByMonth[additionalCostsKey] || []
+      const dodatniTrosak = additionalCostsForMonth
+        .filter(t => t.paid === false)
+        .reduce((sum, s) => sum + s.amount, 0)
+      const dodatneStavke = additionalCostsForMonth
+        .filter(t => t.paid === false)
+        .map(s => ({ stavka: s.stavka, trosak: s.amount }))
+
       const doc = await createInvoiceDoc({
         primalac: form.primalac,
         svrha: form.svrha,
@@ -483,9 +686,12 @@ function App() {
         vanredniTroskovi: form.vanredniTroskovi,
         racun: form.racun,
         iznos: form.iznos,
-        pozivNaBroj: form.pozivNaBroj,
-        racunZa: form.racunZa,
+        pozivNaBroj: poziv,
+        racunZa: bulkForm.racunZa,
         trackingData,
+        additionalCostsByMonth,
+        dodatniTrosak,
+        dodatneStavke,
       })
       const filename = `${form.nazivFajla.trim() || 'uplatnica'}.pdf`
 
@@ -537,28 +743,46 @@ const handleBulkSubmit = async (event) => {
       throw new Error('Unesite pattern za poziv na broj.')
     }
 
-    await loadDodatniTroskovi()
+    // await loadDodatniTroskovi()
+    // await loadTrackingFromRepo()
+
     await loadTrackingFromRepo()
+    await loadDodatniTroskoviDugovanja()
 
     const files = []
     for (let i = 1; i <= apartmentCount; i += 1) {
       const stan = String(i).padStart(2, '0')
       const poziv = `${bulkForm.bulkPozivPattern}${stan}`
 
-      const dodatneZaStan = dodatniTroskovi.filter(dt => dt.stanovi.includes(stan))
-      const dodatniTrosak = dodatneZaStan.reduce((sum, dt) => sum + dt.trosak, 0)
-      const dodatneStavke = dodatneZaStan.map(dt => ({ stavka: dt.stavka, trosak: dt.trosak }))
+      // const dodatneZaStan = dodatniTroskovi.filter(dt => dt.stanovi.includes(stan))
+      // const dodatniTrosak = dodatneZaStan.reduce((sum, dt) => sum + dt.trosak, 0)
+      // const dodatneStavke = dodatneZaStan.map(dt => ({ stavka: dt.stavka, trosak: dt.trosak }))
+
+      const month = bulkForm.bulkPozivPattern.slice(0, 2)
+      const year = `20${bulkForm.bulkPozivPattern.slice(2, 4)}`
+      const additionalCostsKey = `${stan}|${year}-${month}`
+
+      const dodatneZaStan = additionalCostsByMonth[additionalCostsKey] || []
+
+      const dodatniTrosak = dodatneZaStan
+        .filter(t => !t.paid)
+        .reduce((sum, t) => sum + t.amount, 0)
+
+      const dodatneStavke = dodatneZaStan
+        .filter(t => !t.paid)
+        .map(t => ({ stavka: t.stavka, trosak: t.amount }))
 
       const doc = await createInvoiceDoc({
         primalac: form.primalac,
-        svrha: bulkForm.svrha,
-        stanjeNaRacunu: bulkForm.stanjeNaRacunu,
-        vanredniTroskovi: bulkForm.vanredniTroskovi,
+        svrha: form.svrha,
+        stanjeNaRacunu: form.stanjeNaRacunu,
+        vanredniTroskovi: form.vanredniTroskovi,
         racun: form.racun,
         iznos: form.iznos,
         pozivNaBroj: poziv,
         racunZa: bulkForm.racunZa,
         trackingData,
+        additionalCostsByMonth,
         dodatniTrosak,
         dodatneStavke,
       })
@@ -605,11 +829,50 @@ const handleBulkSubmit = async (event) => {
           })
         }
       })
+
+      // Dodaj dodatne troškove
+      const unpaidAdditional = []
+
+      Object.entries(additionalCostsByMonth).forEach(([key, troskovi]) => {
+        const [keyStan, yearMonth] = key.split('|')
+        if (keyStan !== stan) return
+
+        const [addYear, addMonth] = yearMonth.split('-')
+        const addYearNum = Number(addYear)
+        const addMonthNum = Number(addMonth)
+
+        const beforeCurrent =
+          addYearNum < 2000 + currY ||
+          (addYearNum === 2000 + currY && addMonthNum < currM)
+
+        if (beforeCurrent) {
+          troskovi.forEach((trosak) => {
+            if (!trosak.paid) {
+              unpaidAdditional.push({
+                month: addMonth,
+                year: addYear,
+                stavka: trosak.stavka,
+                amount: trosak.amount,
+              })
+            }
+          })
+        }
+      })
+
       unpaidMonths.sort()
-      if (unpaidMonths.length === 0) {
+      unpaidAdditional.sort()
+      totalStan += unpaidAdditional.reduce((sum, a) => sum + a.amount, 0)
+      if (unpaidMonths.length === 0 && unpaidAdditional.length === 0) {
         summaryLines.push(`stan ${i}: sve placeno`)
       } else {
-        summaryLines.push(`stan ${i}: ${unpaidMonths.join(', ')}; ukupno = ${totalStan} dinara`)
+        const allUnpaid = unpaidMonths
+          .map(m => `${m} (1955)`)
+          .concat(
+            unpaidAdditional.map(a =>
+              `${a.month}-${a.year.slice(-2)} (${a.stavka} - ${a.amount})`
+            )
+          )
+        summaryLines.push(`stan ${i}: ${allUnpaid.join(', ')}; ukupno = ${totalStan} dinara`)
       }
       totalAll += totalStan
     }
@@ -661,6 +924,9 @@ const handleBulkSubmit = async (event) => {
           </button>
           <button type="button" className={mode === 'tracking' ? 'active' : ''} onClick={() => setMode('tracking')}>
             Dugovanja
+          </button>
+          <button type="button" className={mode === 'dodatni-troskovi' ? 'active' : ''} onClick={() => setMode('dodatni-troskovi')}>
+            Dodatni troškovi
           </button>
         </div>
 
@@ -753,7 +1019,7 @@ const handleBulkSubmit = async (event) => {
               {loading ? 'Generišem...' : 'Generiši sve račune'}
             </button>
           </form>
-        ) : (
+        ) : mode === 'tracking' ? (
           <div>
             <div className="row tracking-row">
               <label>
@@ -804,16 +1070,46 @@ const handleBulkSubmit = async (event) => {
             </div>
 
             <div className="tracking-months">
-              {['Jan', 'Feb', 'Mar', 'Apr', 'Maj', 'Jun', 'Jul', 'Avg', 'Sep', 'Okt', 'Nov', 'Dec'].map((month, index) => (
-                <div key={month} className="tracking-month-label">
-                  <input
-                    type="checkbox"
-                    checked={checkedMonths[index]}
-                    onChange={() => toggleMonth(index)}
-                  />
-                  <span>{month}</span>
-                </div>
-              ))}
+              {['Jan', 'Feb', 'Mar', 'Apr', 'Maj', 'Jun', 'Jul', 'Avg', 'Sep', 'Okt', 'Nov', 'Dec'].map((month, index) => {
+                const stanPadded = selectedTracking.stan.padStart(2, '0')
+                const yearMonth = `${stanPadded}|${selectedTracking.year}-${String(index + 1).padStart(2, '0')}`
+                const additionalForMonth = additionalCostsByMonth[yearMonth] || []
+                
+                return (
+                  <div key={month} className="tracking-month-group">
+                    <div className="tracking-month-row">
+                      <input
+                        type="checkbox"
+                        checked={checkedMonths[index]}
+                        onChange={() => toggleMonth(index)}
+                      />
+                      <span className="tracking-month-name">{month}</span>
+
+                      {additionalForMonth.length > 0 ? (
+                        additionalForMonth.map((trosak, tIdx) => (
+                          <div key={`${month}-${tIdx}`} className="tracking-additional-inline">
+                            <input
+                              type="checkbox"
+                              checked={trosak.paid}
+                              onChange={() => {
+                                const nextData = { ...additionalCostsByMonth }
+                                nextData[yearMonth] = additionalForMonth.map((t, i) =>
+                                  i === tIdx ? { ...t, paid: !t.paid } : t
+                                )
+                                setAdditionalCostsByMonth(nextData)
+                                window.localStorage.setItem('dugovanja_dodatni_troskovi', JSON.stringify(nextData))
+                              }}
+                            />
+                            <span>{trosak.stavka} ({trosak.amount} din)</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div />
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
 
             <button
@@ -824,8 +1120,116 @@ const handleBulkSubmit = async (event) => {
             >
               {loading ? 'Čuvam...' : 'Sačuvaj dugovanja'}
             </button>
+
           </div>
-        )}
+        ) : mode === 'dodatni-troskovi' ? (
+          <div>
+            <div className="row row-2">
+              <label>
+                Mesec
+                <select
+                  value={newAdditionalCostForm.month}
+                  onChange={(e) => setNewAdditionalCostForm(prev => ({ ...prev, month: e.target.value }))}
+                >
+                  {['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'avg', 'sep', 'okt', 'nov', 'dec']
+                    .map((m, i) => (
+                      <option key={i} value={String(i + 1).padStart(2, '0')}>
+                        {m.toUpperCase()} ({String(i + 1).padStart(2, '0')})
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label>
+                Godina
+                <select
+                  value={newAdditionalCostForm.year}
+                  onChange={(e) => setNewAdditionalCostForm(prev => ({ ...prev, year: e.target.value }))}
+                >
+                  {Array.from({ length: 6 }, (_, i) => 2025 + i).map((year) => (
+                    <option key={year} value={String(year)}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="row row-2">
+              <label>
+                Naziv stavke
+                <input
+                  value={newAdditionalCostForm.stavka}
+                  onChange={(e) => setNewAdditionalCostForm(prev => ({ ...prev, stavka: e.target.value }))}
+                  placeholder="npr. popravka garaznih vrata"
+                />
+              </label>
+              <label>
+                Cena po stanu (dinara)
+                <input
+                  type="number"
+                  value={newAdditionalCostForm.cena}
+                  onChange={(e) => setNewAdditionalCostForm(prev => ({ ...prev, cena: e.target.value }))}
+                  placeholder="5000"
+                />
+              </label>
+            </div>
+
+            <div className="row">
+              <p style={{ marginBottom: '10px' }}>Izaberite stanove:</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(60px, 1fr))', gap: '8px' }}>
+                {Array.from({ length: apartmentCount }, (_, i) => (
+                  <label key={i} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <input
+                      type="checkbox"
+                      checked={newAdditionalCostForm.stanovi[i]}
+                      onChange={(e) => {
+                        const next = [...newAdditionalCostForm.stanovi]
+                        next[i] = e.target.checked
+                        setNewAdditionalCostForm(prev => ({ ...prev, stanovi: next }))
+                      }}
+                    />
+                    Stan {i + 1}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="primary-gradient-button"
+              onClick={addNewAdditionalCost}
+            >
+              Dodaj dodatni trosak
+            </button>
+
+            <div className="row">
+              <p style={{ marginBottom: '10px' }}>Izlističtani dodatni troškovi:</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {Object.entries(additionalCostsByMonth).map(([key, troskovi]) => (
+                  <div key={key} style={{ padding: '10px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '0.9em' }}>
+                    <strong>{key}</strong> - 
+                    {troskovi.map((t, idx) => (
+                      <span key={idx} style={{ marginLeft: '5px' }}>
+                        {t.stavka} ({t.amount} din) {t.paid ? '✓' : '✗'}
+                      </span>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="primary-gradient-button"
+              onClick={saveDodatniTroskoviDugovanja}
+              disabled={loading}
+              style={{ marginTop: '20px' }}
+            >
+              {loading ? 'Čuvam...' : 'Sačuvaj dodatne troškove'}
+            </button>
+          </div>
+        ) : null
+        }
 
         {status && (
           <div className="status">

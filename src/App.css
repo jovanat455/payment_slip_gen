@@ -298,3 +298,39 @@ button:disabled {
     width: 100%;
   }
 }
+
+.tracking-months {
+  display: grid;
+  gap: 15px;
+  margin-top: 24px;
+  margin-bottom: 24px;
+}
+
+.tracking-month-row {
+  display: grid;
+  grid-template-columns: 18px 60px 1fr;
+  align-items: center;
+  column-gap: 8px;
+  min-height: 24px;
+}
+
+.tracking-month-row input[type='checkbox'],
+.tracking-additional-inline input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  padding: 0;
+  margin: 0;
+}
+
+.tracking-month-name {
+  font-weight: 600;
+}
+
+.tracking-additional-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #555;
+  font-size: 0.9rem;
+}

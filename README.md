@@ -65,25 +65,25 @@ Example:
 - `YEAR`: Year (2025, 2026, etc.)
 - `MONTHS`: Comma-separated 12 values (1 = paid, 0 = unpaid) for January-December
 
-#### `src/dodatni_troskovi.txt` - Additional costs file
+#### `src/dugovanja_dodatni_troskovi.txt` - Additional apartment costs and payment status
 
-Format: Blocks separated by `====`, each containing:
+Format:
 
-```
-====
-stavka: item description
-stanovi: 01,05,07,08,11
-dodatan trosak: 5000
-====
-stavka: another item
-stanovi: 03,03,07
-dodatan trosak: 2000
-====
-```
+```txt
+06|2026-01|popravka garaznih vrata|5000|0
+07|2026-01|popravka garaznih vrata|5000|0
+08|2026-01|popravka garaznih vrata|5000|1
 
-- `stavka`: Description of additional cost item
-- `stanovi`: Comma-separated list of apartments (can repeat for multiple payments per apartment)
-- `dodatan trosak`: Amount in dinars
+Example:
+
+Apartment 06 has an unpaid additional cost of 5000 dinars for garage door repair in January 2026.
+Apartment 08 has already paid the same cost.
+
+Additional costs are automatically:
+
+included in generated invoices
+shown in unpaid debt calculation
+tracked separately from the regular monthly maintenance payment
 
 **Example with duplicate apartments:**
 Stan 03 appears twice, so it will be charged 2×2000 = 4000 dinars for that item.

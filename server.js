@@ -84,6 +84,51 @@ app.get('/api/dodatni-troskovi', (req, res) => {
   })
 })
 
+app.get('/api/dodatni-troskovi-dugovanja', (req, res) => {
+  const filePath = path.join(process.cwd(), 'src', 'dugovanja_dodatni_troskovi.txt')
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send('')
+  }
+  fs.readFile(filePath, 'utf8', (err, data) => {
+    if (err) {
+      return res.status(500).json({ error: 'Ne mogu da otvorim src/dugovanja_dodatni_troskovi.txt' })
+    }
+    res.type('text/plain').send(data)
+  })
+})
+
+app.post('/api/save-dodatni-troskovi-dugovanja', (req, res) => {
+  const { text } = req.body
+  if (!text) {
+    return res.status(400).json({ error: 'Nema teksta za snimanje' })
+  }
+
+  const filePath = path.join(process.cwd(), 'src', 'dugovanja_dodatni_troskovi.txt')
+  fs.writeFile(filePath, text, 'utf8', (err) => {
+    if (err) {
+      return res.status(500).json({ error: 'Ne mogu da snimim src/dugovanja_dodatni_troskovi.txt' })
+    }
+    res.json({ saved: true })
+  })
+})
+
+app.post('/api/append-dodatni-troskovi-dugovanja', (req, res) => {
+  const { line } = req.body
+  if (!line) {
+    return res.status(400).json({ error: 'Nema reda za dodavanje' })
+  }
+
+  const filePath = path.join(process.cwd(), 'src', 'dugovanja_dodatni_troskovi.txt')
+  const textToAppend = fs.existsSync(filePath) ? '\n' + line : line
+  
+  fs.appendFile(filePath, textToAppend, 'utf8', (err) => {
+    if (err) {
+      return res.status(500).json({ error: 'Ne mogu da appendujem u src/dugovanja_dodatni_troskovi.txt' })
+    }
+    res.json({ appended: true })
+  })
+})
+
 const port = 3000
 app.listen(port, () => {
   console.log(`Backend server is running at http://localhost:${port}`)
