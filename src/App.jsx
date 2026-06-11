@@ -389,11 +389,11 @@ function App() {
       dodatneStavke = [],
     }) => {
       const baseAmount = Number(iznos.replace(',', '.'))
-      if (Number.isNaN(baseAmount) || baseAmount <= 0) {
-        throw new Error('Iznos mora biti pozitivan broj.')
+      if (Number.isNaN(baseAmount) || baseAmount < 0) {
+        throw new Error('Iznos mora biti broj (>= 0).')
       }
 
-    const amount = baseAmount + dodatniTrosak
+      const amount = baseAmount + dodatniTrosak
     const iznosRsd = amount.toFixed(2).replace('.', ',')
     const iban = racun.replace(/\s|-/g, '').toUpperCase()
     const poziv = pozivNaBroj.trim()
@@ -667,7 +667,9 @@ function App() {
       const monthPart = form.pozivNaBroj.slice(-6, -2)
       const moMonth = monthPart.slice(0, 2)
       const moYear = monthPart.slice(2, 4)
-      const yearMonth = `${moYear ? `20${moYear}` : new Date().getFullYear()}-${moMonth}`
+      const fullYear = moYear ? `20${moYear}` : new Date().getFullYear()
+      const yearMonth = `${fullYear}-${moMonth}`
+      const poziv = form.pozivNaBroj
       
       // Pronađi dodatne troškove za ovaj stan i mesec
       const additionalCostsKey = `${stan}|${yearMonth}`
@@ -679,13 +681,21 @@ function App() {
         .filter(t => t.paid === false)
         .map(s => ({ stavka: s.stavka, trosak: s.amount }))
 
+      // Proveravanja da li je mesec za taj stan već plaćen
+      const monthIndex = Number(moMonth) - 1
+      const trackingKey = `${stan}|${fullYear}`
+      let iznos = form.iznos
+      if (trackingData[trackingKey] && trackingData[trackingKey][monthIndex] === true) {
+        iznos = '0'
+      }
+
       const doc = await createInvoiceDoc({
         primalac: form.primalac,
-        svrha: form.svrha,
+        svrha: bulkForm.svrha,
         stanjeNaRacunu: form.stanjeNaRacunu,
         vanredniTroskovi: form.vanredniTroskovi,
         racun: form.racun,
-        iznos: form.iznos,
+        iznos: iznos,
         pozivNaBroj: poziv,
         racunZa: bulkForm.racunZa,
         trackingData,
@@ -750,6 +760,10 @@ const handleBulkSubmit = async (event) => {
     await loadDodatniTroskoviDugovanja()
 
     const files = []
+    const month = bulkForm.bulkPozivPattern.slice(0, 2)
+    const year = `20${bulkForm.bulkPozivPattern.slice(2, 4)}`
+    const monthIndex = Number(month) - 1
+
     for (let i = 1; i <= apartmentCount; i += 1) {
       const stan = String(i).padStart(2, '0')
       const poziv = `${bulkForm.bulkPozivPattern}${stan}`
@@ -758,8 +772,6 @@ const handleBulkSubmit = async (event) => {
       // const dodatniTrosak = dodatneZaStan.reduce((sum, dt) => sum + dt.trosak, 0)
       // const dodatneStavke = dodatneZaStan.map(dt => ({ stavka: dt.stavka, trosak: dt.trosak }))
 
-      const month = bulkForm.bulkPozivPattern.slice(0, 2)
-      const year = `20${bulkForm.bulkPozivPattern.slice(2, 4)}`
       const additionalCostsKey = `${stan}|${year}-${month}`
 
       const dodatneZaStan = additionalCostsByMonth[additionalCostsKey] || []
@@ -772,13 +784,20 @@ const handleBulkSubmit = async (event) => {
         .filter(t => !t.paid)
         .map(t => ({ stavka: t.stavka, trosak: t.amount }))
 
+      // Proveravanja da li je mesec za taj stan već plaćen
+      const trackingKey = `${stan}|${year}`
+      let iznos = form.iznos
+      if (trackingData[trackingKey] && trackingData[trackingKey][monthIndex] === true) {
+        iznos = '0'
+      }
+
       const doc = await createInvoiceDoc({
         primalac: form.primalac,
-        svrha: form.svrha,
-        stanjeNaRacunu: form.stanjeNaRacunu,
-        vanredniTroskovi: form.vanredniTroskovi,
+        svrha: bulkForm.svrha,
+        stanjeNaRacunu: bulkForm.stanjeNaRacunu,
+        vanredniTroskovi: bulkForm.vanredniTroskovi,
         racun: form.racun,
-        iznos: form.iznos,
+        iznos: iznos,
         pozivNaBroj: poziv,
         racunZa: bulkForm.racunZa,
         trackingData,
